@@ -6,6 +6,9 @@ grails:
     spring:
         transactionManagement:
             proxies: false
+     plugin:
+        springsecurity:
+            active: false           
 info:
     app:
         name: '@info.app.name@'
