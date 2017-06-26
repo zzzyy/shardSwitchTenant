@@ -1,0 +1,108 @@
+package com.jeffrick.grails.plugins.services
+
+import com.jeffrick.grails.plugin.sharding.SelectedTenantHolder
+import org.hibernate.HibernateException
+
+import com.jeffrick.grails.plugin.sharding.CurrentShard
+import com.jeffrick.grails.plugin.sharding.ShardConfig
+import com.jeffrick.grails.plugin.sharding.Shards
+import com.jeffrick.grails.plugins.sharding.Shard
+import com.jeffrick.grails.plugin.sharding.annotation.Shard as ShardAnnotation
+
+/**
+ * @author <a href='mailto:jeffrick@gmail.com'>Jeff Rick</a>
+ */
+class ShardService {
+    def sessionFactory
+
+    // This needs to be false otherwise all connections create will always be transactional
+    static transactional = false
+
+    def getShard(object) {
+        println"objecy"+object
+        //Index currentIndex = Index.get()
+        Shard currentShard
+
+        // If the object is the shard lookup domain class then we can find the current shard
+        if (object.metaClass.getTheClass().isAnnotationPresent(ShardAnnotation)) {
+            ShardAnnotation ann = object.metaClass.getTheClass().getAnnotation(ShardAnnotation)
+            String fieldName = ann.fieldName()
+            println"objectfieldName"+object."$fieldName"
+
+            // If we don't have a shard assigned go assign one
+            if (object."$fieldName" == null) {
+                currentShard = getNextShard()
+                object."$fieldName" = currentShard.shardName
+            } else {
+                currentShard = Shard.findByShardName(object."$fieldName")
+            }
+        } else {
+            throw new Exception("Error, attempting to get the current shard from a non-shard domain class")
+        }
+        println "currentShard = $currentShard"
+        return (currentShard)
+
+    }
+    def changeByTenant(Object){
+        SelectedTenantHolder.setCurrentTenant(getShard(Object)?.shardName);
+    }
+    def changeByObject(object) {
+        def currentShard = getShard(object)
+        change(currentShard.shardName)
+    }
+
+    def change(String name) {
+        Shards.shards.each {
+            if (it.name == name) {
+                change it
+            }
+        }
+    }
+
+    def change(ShardConfig shard) {
+        if (shard) {
+            if (shard.name != CurrentShard.get().name) {
+                //test connection
+                def oldEnv = CurrentShard.get().name
+
+                CurrentShard.setShard shard
+
+                try {
+                    println "the session factory ${sessionFactory.getCurrentSession().getClass().getCanonicalName()}"
+                    println "THe session transaction ${sessionFactory.getCurrentSession().transaction.getClass().getCanonicalName()}"
+                    CurrentShard.setAutoCommit true
+                } catch (HibernateException he) {
+                    CurrentShard.setAutoCommit true
+                } catch (Exception e) {
+                    log.error "Error: ${e}"
+                }
+
+                try {
+                    try {
+                        sessionFactory.currentSession.clear()
+                        sessionFactory.currentSession.disconnect()
+                    } catch (Exception e) {
+                        //  e.printStackTrace()
+                    }
+                    return true
+                } catch (e) {
+                    CurrentShard.setShard(Shards.getShards().find { oldEnv == it.name })
+                    log.error "Unable to connect to database" + e.message
+                    throw new Exception("Unable to connect to database + " + e.message)
+                }
+            }
+            return true
+        } else {
+            throw new Exception("No shardName provided")
+        }
+    }
+
+    Shard getNextShard() {
+        def c = Shard.createCriteria()
+        def shards = c {
+            order("ratio", "asc")
+            maxResults(1)
+        }
+        return (shards[0])
+    }
+}
