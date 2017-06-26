@@ -6,7 +6,7 @@ grails:
     spring:
         transactionManagement:
             proxies: false
-     plugin:
+    plugin:
         springsecurity:
             active: false           
 info:
