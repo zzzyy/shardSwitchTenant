@@ -10,27 +10,23 @@ import groovy.sql.Sql
 class BookController {
     def shardService
     def switchingDataSource
-    def index(Integer max) {
-      /*  shardService.change("shard01");
-        new Book(author: "someone from shard01",title: "something from shard01").save();
-
-        render Book.list();
-
-        shardService.change("shard02");
-        new Book(author: "someone from shard02",title: "something from shard02").save();
-
-        render Book.list();*/
-        params.max = Math.min(max ?: 10, 100)
-        respond Book.list(params), model:[bookCount: Book.count()]
-    }
-    def tenantSwitch(){
-        addData()
+    def index() {
+       addData()
         shardService.changeByTenant(Customer.findByCustomerHostName('shpg'))
         List<Book> books = Book.list()
         println"books"+books.title
         def row = new Sql(switchingDataSource).rows("select * from book")
         println "the rows=====>>>>> $row"
         render "hello"
+    }
+    def tenantSwitch(){
+        /*addData()
+        shardService.changeByTenant(Customer.findByCustomerHostName('shpg'))
+        List<Book> books = Book.list()
+        println"books"+books.title
+        def row = new Sql(switchingDataSource).rows("select * from book")
+        println "the rows=====>>>>> $row"
+        render "hello"*/
     }
     def addData(){
         Shard.saveAll(
